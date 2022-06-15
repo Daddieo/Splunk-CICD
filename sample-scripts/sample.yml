@@ -1,0 +1,84 @@
+
+---
+- hosts: localhost
+  vars:
+    splunk_admin_user: admin
+    splunk_admin_password: Get your password here some how, we use the vault
+
+    bundle_push: false
+  tasks:
+
+  - name: copy server.conf to /opt/splunk/etc/system/local/
+    copy:
+      src: /home/ansible/default-mode.conf
+      dest: /opt/splunk/etc/system/local/default-mode.conf
+      owner: splunk
+      group: splunk
+
+  - name: copy server.conf to /opt/splunk/etc/system/local/
+    copy:
+      src: /home/ansible/server.conf
+      dest: /opt/splunk/etc/system/local/server.conf
+      owner: splunk
+      group: splunk
+
+  - name: Git - clone from splunk repo
+    git:
+      repo: git@cfsr.sso.dcn:nls/splunk.git
+      version: master
+      update: yes
+      dest: /home/ansible/splunk
+      accept_hostkey: yes
+      force: yes
+      key_file: "keyfile"
+      ssh_opts: "-o StrictHostKeyChecking=no"
+
+  - name: change ownership of splunk directory
+    file:
+      path: /home/ansible/splunk
+      owner: splunk
+      group: splunk
+      state: directory
+      recurse: true
+
+  - name: Insert the pass4SymmKey into server.conf
+    replace:
+      dest: '/opt/splunk/etc/system/local/server.conf'
+      regexp: 'pass4SymmKey.*'
+      replace: 'pass4SymmKey = {{ splunk_admin_password }}'
+
+  - name: Replace hostname
+    replace:
+      dest: /opt/splunk/etc/system/local/server.conf
+      regexp: pu_hst_name_here
+      replace: '{{ ansible_hostname }}'
+
+  - name: Copy folders from /home/ansible/git-splunk
+    ignore_errors: yes
+    synchronize:
+      src: "{{ item.path }}/"
+      dest: /opt/splunk/etc/apps
+      checksum: yes
+    delegate_to: localhost
+    with_items:
+      - { path: '/home/ansible/splunk/BAs/_global' }
+      - { path: '/home/ansible/splunk/BAs/soc-dev' }
+      - { path: '/home/ansible/splunk/BAs/nls-es' }
+      - { path: '/home/ansible/splunk/TAs/_global' }
+      - { path: '/home/ansible/splunk/TAs/soc-dev' }
+      - { path: '/home/ansible/splunk/TAs/nls-es' }
+      - { path: '/home/ansible/splunk/UIs/_global' }
+      - { path: '/home/ansible/splunk/UIs/soc-dev' }
+      - { path: '/home/ansible/splunk/UIs/nls-es' }
+      - { path: '/home/ansible/splunk/IAs/_global' }
+      - { path: '/home/ansible/splunk/IAs/soc-dev' }
+      - { path: '/home/ansible/splunk/IAs/nls-es' }
+
+  - name: Insert shared DMA GUID in Splunk_SA_CIM/local/datamodels.conf
+    replace:
+      dest: '/opt/splunk/etc/apps/Splunk_SA_CIM/local/datamodels.conf'
+      regexp: '\]'
+      replace: ']\nacceleration.source_guid         = datamodelguid'
+
+
+
